@@ -13,7 +13,7 @@ fn App() -> Html {
 
     let matrix: UseStateHandle<Matrix> = use_state(|| {
         [
-            [32, 16, 16, 512],
+            [32, 16, 16, 16],
             [128, 64, 0, 256],
             [512, 2, 128, 2048],
             [0, 512, 32, 16],
@@ -99,30 +99,31 @@ impl Direction {
 fn is_within_bounds(i: usize, j: usize, row_offset: i8, col_offset: i8) -> bool {
     let next_i = (i as i8 + row_offset) as usize;
     let next_j = (j as i8 + col_offset) as usize;
-    
+
     next_i < ROWS && next_j < COLS
 }
 
 fn move_matrix(matrix: &mut Matrix, dir: Direction) {
     let (row_offset, col_offset) = dir.to_tuple();
 
-    let row_range: Box<dyn Iterator<Item = usize>> = 
-    if row_offset == 1 { 
-        Box::new((0..ROWS).rev()) 
-    } else { 
-        Box::new(0..ROWS) 
+    // track merged tiles
+    let mut merged = [[false; COLS]; ROWS];
+
+    let row_range: Box<dyn Iterator<Item = usize>> = if row_offset == 1 {
+        Box::new((0..ROWS).rev())
+    } else {
+        Box::new(0..ROWS)
     };
 
     for i in row_range {
-        let col_range: Box<dyn Iterator<Item = usize>> = 
-        if col_offset == 1 { 
-            Box::new((0..COLS).rev()) 
-        } else { 
-            Box::new(0..COLS) 
+        let col_range: Box<dyn Iterator<Item = usize>> = if col_offset == 1 {
+            Box::new((0..COLS).rev())
+        } else {
+            Box::new(0..COLS)
         };
-    
+
         for j in col_range {
-            // Skip 
+            // Skip
             if matrix[i][j] == 0 {
                 continue;
             }
@@ -150,9 +151,12 @@ fn move_matrix(matrix: &mut Matrix, dir: Direction) {
                 let next_i = (current_i as i8 + row_offset) as usize;
                 let next_j = (current_j as i8 + col_offset) as usize;
 
-                if matrix[current_i][current_j] == matrix[next_i][next_j] {
-                    matrix[current_i][current_j] *= 2;
-                    matrix[next_i][next_j] = 0;
+                if matrix[current_i][current_j] == matrix[next_i][next_j]
+                    && !merged[current_i][current_j]
+                {
+                    matrix[current_i][current_j] = 0;
+                    matrix[next_i][next_j] *= 2;
+                    merged[current_i][current_j] = true;
                 }
             }
         }
@@ -169,11 +173,9 @@ fn move_right(matrix: &mut Matrix) {
 
 fn move_up(matrix: &mut Matrix) {
     move_matrix(matrix, Direction::Up)
-
 }
 fn move_down(matrix: &mut Matrix) {
     move_matrix(matrix, Direction::Down)
-
 }
 
 fn get_class_for_score(score: u16) -> String {
