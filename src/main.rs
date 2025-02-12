@@ -6,7 +6,46 @@ use yew::{classes, html};
 static ROWS: usize = 4;
 static COLS: usize = 4;
 
-type Matrix = [[u16; COLS]; ROWS];
+#[derive(Debug, Clone, Copy)]
+enum Direction {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+impl Direction {
+    fn to_tuple(&self) -> (i8, i8) {
+        match self {
+            Direction::Left => (0, -1),
+            Direction::Right => (0, 1),
+            Direction::Up => (-1, 0),
+            Direction::Down => (1, 0),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CellState {
+    New,
+    Merged,
+    Moved,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Cell {
+    value: u16,
+    state: Option<CellState>,
+    dir: Option<Direction>
+}
+
+impl PartialEq for Cell {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+type Matrix = [[Cell; COLS]; ROWS];
 
 #[function_component]
 fn App() -> Html {
@@ -41,67 +80,67 @@ fn App() -> Html {
     }
 
     html! {
-    <div
-        class="container"
-        tabindex="0"
-        ref={container_ref}
-        onkeydown={on_key_down}
-    >
-        <div class="field">
-            {
-                matrix.iter().map(|row| {
-                    html! {
-                        <div class="row">
-                            {
-                                row.iter().map(|&value| {
-                                    html! {
-                                        <div class={classes!("cell", get_class_for_score(value))}>
-                                            { value }
-                                        </div>
-                                    }
-                                }).collect::<Html>()
-                            }
-                        </div>
-                    }
-                }).collect::<Html>()
-            }
+        <div class="container" tabindex="0" ref={container_ref} onkeydown={on_key_down}>
+            <div class="field">
+                {
+                    matrix.iter().map(|row| {
+                        html! {
+                            <div class="row">
+                                {
+                                    row.iter().map(|cell| {
+                                        let mut classes = classes!("cell", get_class_for_score(cell.value));
+
+                                        if let Some(state) = cell.state {
+                                            match state  {
+                                                CellState::New => classes.push("cell-new"),
+                                                CellState::Merged => classes.push("cell-merged"),
+                                                _ => {},
+                                            }
+                                        }
+              
+                                        if let Some(direction) = cell.dir {
+                                            match direction {
+                                                Direction::Left => classes.push("cell-moved-left"),
+                                                Direction::Right => classes.push("cell-moved-right"),
+                                                Direction::Up => classes.push("cell-moved-up"),
+                                                Direction::Down => classes.push("cell-moved-down"),
+                                            }
+                                        }    
+    
+                                        html! {
+                                            <div class={classes}>
+                                                { cell.value }
+                                            </div>
+                                        }
+                                    }).collect::<Html>()
+                                }
+                            </div>
+                        }
+                    }).collect::<Html>()
+                }
+            </div>
         </div>
-    </div>
-    }
+    }    
 }
 
-enum Direction {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
-impl Direction {
-    fn to_tuple(&self) -> (i8, i8) {
-        match self {
-            Direction::Left => (0, -1),
-            Direction::Right => (0, 1),
-            Direction::Up => (-1, 0),
-            Direction::Down => (1, 0),
+fn reset_tile_states(matrix: &mut Matrix) {
+    for row in matrix.iter_mut() {
+        for cell in row.iter_mut() {
+            cell.state = None;
+            cell.dir = None;
         }
     }
 }
 
 fn generate_start_matrix() -> Matrix {
-    let mut start: Matrix = 
-    [
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-    ];
+    let mut start: Matrix = [[Cell { value: 0, state: None, dir: None}; COLS]; ROWS];
 
     spawn_tile(&mut start);
     spawn_tile(&mut start);
 
     start
 }
+
 
 fn is_within_bounds(i: usize, j: usize, row_offset: i8, col_offset: i8) -> bool {
     let next_i = (i as i8 + row_offset) as usize;
@@ -111,6 +150,8 @@ fn is_within_bounds(i: usize, j: usize, row_offset: i8, col_offset: i8) -> bool 
 }
 
 fn move_matrix(matrix: &mut Matrix, dir: Direction) {
+    reset_tile_states(matrix);
+
     let (row_offset, col_offset) = dir.to_tuple();
 
     // track merged tiles
@@ -132,7 +173,7 @@ fn move_matrix(matrix: &mut Matrix, dir: Direction) {
 
         for j in col_range {
             // Skip
-            if matrix[i][j] == 0 {
+            if matrix[i][j].value == 0 {
                 continue;
             }
 
@@ -144,12 +185,14 @@ fn move_matrix(matrix: &mut Matrix, dir: Direction) {
                 let next_i = (current_i as i8 + row_offset) as usize;
                 let next_j = (current_j as i8 + col_offset) as usize;
 
-                if matrix[next_i][next_j] == 0 {
+                if matrix[next_i][next_j].value == 0 {
                     matrix[next_i][next_j] = matrix[current_i][current_j];
-                    matrix[current_i][current_j] = 0;
+                    matrix[current_i][current_j] = Cell { value: 0, state: None, dir: None };
+                    matrix[next_i][next_j].state = Some(CellState::Moved);
+                    matrix[next_i][next_j].dir = Some(dir);
+
                     current_i = next_i;
                     current_j = next_j;
-
                     has_changed = true;
                 } else {
                     break;
@@ -164,9 +207,11 @@ fn move_matrix(matrix: &mut Matrix, dir: Direction) {
                 if matrix[current_i][current_j] == matrix[next_i][next_j]
                     && !merged[current_i][current_j]
                 {
-                    matrix[current_i][current_j] = 0;
-                    matrix[next_i][next_j] *= 2;
+                    matrix[current_i][current_j].value = 0;
                     merged[current_i][current_j] = true;
+
+                    matrix[next_i][next_j].value *= 2;
+                    matrix[next_i][next_j].state = Some(CellState::Merged);
 
                     has_changed = true;
 
@@ -185,14 +230,15 @@ fn spawn_tile(matrix: &mut Matrix) {
 
     for i in 0..ROWS {
         for j in 0..COLS {
-            if matrix[i][j] == 0 {
+            if matrix[i][j].value == 0 {
                 empty_cells.push((i, j));
             }
         }
     }
 
     if let Some(&(x, y)) = empty_cells.choose(&mut thread_rng()) {
-        matrix[x][y] = if rand::random::<f32>() < 0.9 { 2 } else { 4 }; 
+        matrix[x][y].value = if rand::random::<f32>() < 0.9 { 2 } else { 4 }; 
+        matrix[x][y].state = Some(CellState::New);
     }
 }
 
