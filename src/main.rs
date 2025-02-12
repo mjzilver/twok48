@@ -1,4 +1,5 @@
-use log::info;
+use rand::prelude::SliceRandom;
+use rand::thread_rng;
 use yew::prelude::*;
 use yew::{classes, html};
 
@@ -9,20 +10,11 @@ type Matrix = [[u16; COLS]; ROWS];
 
 #[function_component]
 fn App() -> Html {
-    wasm_logger::init(wasm_logger::Config::default());
-
     let matrix: UseStateHandle<Matrix> = use_state(|| {
-        [
-            [32, 16, 16, 16],
-            [128, 64, 0, 256],
-            [512, 2, 128, 2048],
-            [0, 512, 32, 16],
-        ]
+        generate_start_matrix()
     });
 
     let on_key_down = {
-        info!("Key pressed");
-
         let matrix = matrix.clone();
         Callback::from(move |event: KeyboardEvent| {
             let mut current_matrix = *matrix;
@@ -96,6 +88,21 @@ impl Direction {
     }
 }
 
+fn generate_start_matrix() -> Matrix {
+    let mut start: Matrix = 
+    [
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+    ];
+
+    spawn_tile(&mut start);
+    spawn_tile(&mut start);
+
+    start
+}
+
 fn is_within_bounds(i: usize, j: usize, row_offset: i8, col_offset: i8) -> bool {
     let next_i = (i as i8 + row_offset) as usize;
     let next_j = (j as i8 + col_offset) as usize;
@@ -108,6 +115,7 @@ fn move_matrix(matrix: &mut Matrix, dir: Direction) {
 
     // track merged tiles
     let mut merged = [[false; COLS]; ROWS];
+    let mut has_changed = false;
 
     let row_range: Box<dyn Iterator<Item = usize>> = if row_offset == 1 {
         Box::new((0..ROWS).rev())
@@ -141,6 +149,8 @@ fn move_matrix(matrix: &mut Matrix, dir: Direction) {
                     matrix[current_i][current_j] = 0;
                     current_i = next_i;
                     current_j = next_j;
+
+                    has_changed = true;
                 } else {
                     break;
                 }
@@ -157,9 +167,32 @@ fn move_matrix(matrix: &mut Matrix, dir: Direction) {
                     matrix[current_i][current_j] = 0;
                     matrix[next_i][next_j] *= 2;
                     merged[current_i][current_j] = true;
+
+                    has_changed = true;
+
                 }
             }
         }
+    }
+
+    if has_changed {
+        spawn_tile(matrix);
+    }
+}
+
+fn spawn_tile(matrix: &mut Matrix) {
+    let mut empty_cells = vec![];
+
+    for i in 0..ROWS {
+        for j in 0..COLS {
+            if matrix[i][j] == 0 {
+                empty_cells.push((i, j));
+            }
+        }
+    }
+
+    if let Some(&(x, y)) = empty_cells.choose(&mut thread_rng()) {
+        matrix[x][y] = if rand::random::<f32>() < 0.9 { 2 } else { 4 }; 
     }
 }
 
@@ -183,5 +216,6 @@ fn get_class_for_score(score: u16) -> String {
 }
 
 fn main() {
+    wasm_logger::init(wasm_logger::Config::default());
     yew::Renderer::<App>::new().render();
 }
