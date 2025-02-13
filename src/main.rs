@@ -5,6 +5,7 @@ use yew::{classes, html};
 
 static ROWS: usize = 4;
 static COLS: usize = 4;
+static TILE_SIZE: isize = 125;
 
 #[derive(Debug, Clone, Copy)]
 enum Direction {
@@ -36,7 +37,8 @@ enum CellState {
 struct Cell {
     value: u16,
     state: Option<CellState>,
-    dir: Option<Direction>
+    dir: Option<Direction>,
+    prev: Option<(isize, isize)>
 }
 
 impl PartialEq for Cell {
@@ -83,38 +85,37 @@ fn App() -> Html {
         <div class="container" tabindex="0" ref={container_ref} onkeydown={on_key_down}>
             <div class="field">
                 {
-                    matrix.iter().map(|row| {
+                    matrix.iter().enumerate().map(|(i,  row)| {
                         html! {
-                            <div class="row">
-                                {
-                                    row.iter().map(|cell| {
-                                        let mut classes = classes!("cell", get_class_for_score(cell.value));
+                            {
+                                row.iter().enumerate().map(|(j, cell)| {
+                                    let mut classes = classes!("cell", get_class_for_score(cell.value));
 
-                                        if let Some(state) = cell.state {
-                                            match state  {
-                                                CellState::New => classes.push("cell-new"),
-                                                CellState::Merged => classes.push("cell-merged"),
-                                                _ => {},
-                                            }
+                                    if let Some(state) = cell.state {
+                                        match state  {
+                                            CellState::New => classes.push("cell-new"),
+                                            CellState::Merged => classes.push("cell-merged"),
+                                            CellState::Moved => classes.push("cell-moved"),
                                         }
-              
-                                        if let Some(direction) = cell.dir {
-                                            match direction {
-                                                Direction::Left => classes.push("cell-moved-left"),
-                                                Direction::Right => classes.push("cell-moved-right"),
-                                                Direction::Up => classes.push("cell-moved-up"),
-                                                Direction::Down => classes.push("cell-moved-down"),
-                                            }
-                                        }    
-    
-                                        html! {
-                                            <div class={classes}>
-                                                { cell.value }
-                                            </div>
-                                        }
-                                    }).collect::<Html>()
-                                }
-                            </div>
+                                    }
+
+                                    let transform_style = if let Some((prev_i, prev_j)) = cell.prev {
+                                        let from_x = (prev_j - j as isize) * TILE_SIZE;
+                                        let from_y = (prev_i - i as isize) * TILE_SIZE;
+                                        
+                                        format!("--from-x: {}px; --from-y: {}px;", from_x, from_y)                                     
+                                    } else {
+                                        "".to_string()
+                                    };
+                                        
+                                    html! {
+                                        <div class={classes}
+                                            style={transform_style}>
+                                            { cell.value }
+                                        </div>
+                                    }
+                                }).collect::<Html>()
+                            }
                         }
                     }).collect::<Html>()
                 }
@@ -128,12 +129,13 @@ fn reset_tile_states(matrix: &mut Matrix) {
         for cell in row.iter_mut() {
             cell.state = None;
             cell.dir = None;
+            cell.prev = None;
         }
     }
 }
 
 fn generate_start_matrix() -> Matrix {
-    let mut start: Matrix = [[Cell { value: 0, state: None, dir: None}; COLS]; ROWS];
+    let mut start: Matrix = [[Cell { value: 0, state: None, dir: None, prev: None}; COLS]; ROWS];
 
     spawn_tile(&mut start);
     spawn_tile(&mut start);
@@ -186,10 +188,16 @@ fn move_matrix(matrix: &mut Matrix, dir: Direction) {
                 let next_j = (current_j as i8 + col_offset) as usize;
 
                 if matrix[next_i][next_j].value == 0 {
-                    matrix[next_i][next_j] = matrix[current_i][current_j];
-                    matrix[current_i][current_j] = Cell { value: 0, state: None, dir: None };
-                    matrix[next_i][next_j].state = Some(CellState::Moved);
-                    matrix[next_i][next_j].dir = Some(dir);
+                    let mut moving_tile = matrix[current_i][current_j];
+                    moving_tile.state = Some(CellState::Moved);
+                    moving_tile.dir = Some(dir);
+                    if moving_tile.prev.is_none() {
+                        moving_tile.prev = Some((current_i as isize, current_j as isize));
+                    }
+                    
+                    matrix[next_i][next_j] = moving_tile; 
+                    matrix[current_i][current_j] = Cell { value: 0, state: None, dir: None, prev: None };  
+                    
 
                     current_i = next_i;
                     current_j = next_j;

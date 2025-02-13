@@ -1,0 +1,33 @@
+
+.cell-new {
+    animation: fade-in 0.3s ease-out;
+}
+
+.cell-merged {
+    animation: pop 0.2s ease-out;
+}
+
+.cell-moved {
+    animation: move 0.3s ease-in-out;
+    z-index: 100;
+}
+
+@keyframes fade-in {
+    from { opacity: 0; transform: scale(0.5); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+@keyframes move {
+    from {
+        transform: translate(var(--from-x, 0), var(--from-y, 0));
+    }
+    to {
+        transform: translate(0, 0);
+    }
+}
