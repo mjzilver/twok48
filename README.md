@@ -9,5 +9,5 @@ Simple Yew Learning project remaking the popular browser game 2048.
 - [x] Spawning
 - [x] Animations
 - [ ] AI auto-play
-- [ ] Deployment pipeline to github pages
+- [x] Deployment pipeline to github pages
 - [ ] Local storage
