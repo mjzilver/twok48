@@ -89,7 +89,7 @@ fn App() -> Html {
                         html! {
                             {
                                 row.iter().enumerate().map(|(j, cell)| {
-                                    let mut classes = classes!("cell", get_class_for_score(cell.value));
+                                    let mut classes = classes!("inner-cell", get_class_for_score(cell.value));
 
                                     if let Some(state) = cell.state {
                                         match state  {
@@ -109,9 +109,14 @@ fn App() -> Html {
                                     };
                                         
                                     html! {
-                                        <div class={classes}
-                                            style={transform_style}>
-                                            { cell.value }
+                                        <div class="cell">
+                                            <div class={classes}
+                                                style={transform_style}>
+                                                { 
+                                                    if cell.value == 0 { "".to_string() } 
+                                                    else { cell.value.to_string() } 
+                                                }
+                                            </div>
                                         </div>
                                     }
                                 }).collect::<Html>()
