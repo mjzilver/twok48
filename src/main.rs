@@ -37,8 +37,7 @@ enum CellState {
 struct Cell {
     value: u16,
     state: Option<CellState>,
-    dir: Option<Direction>,
-    prev: Option<(isize, isize)>
+    prev: Option<(isize, isize)>,
 }
 
 impl PartialEq for Cell {
@@ -51,9 +50,7 @@ type Matrix = [[Cell; COLS]; ROWS];
 
 #[function_component]
 fn App() -> Html {
-    let matrix: UseStateHandle<Matrix> = use_state(|| {
-        generate_start_matrix()
-    });
+    let matrix: UseStateHandle<Matrix> = use_state(|| generate_start_matrix());
 
     let on_key_down = {
         let matrix = matrix.clone();
@@ -84,70 +81,71 @@ fn App() -> Html {
     html! {
         <div class="container" tabindex="0" ref={container_ref} onkeydown={on_key_down}>
             <div class="field">
+                { for matrix.iter().enumerate().map(|(i, row)| render_row(row, i)) }
+            </div>
+        </div>
+    }
+}
+
+fn render_row(row: &[Cell], i: usize) -> Html {
+    html! {
+        for row.iter().enumerate().map(|(j, cell)| render_tile(cell, i, j))
+    }
+}
+
+fn render_tile(cell: &Cell, i: usize, j: usize) -> Html {
+    let mut classes = classes!("inner-cell", get_class_for_score(cell.value));
+    let mut extra_styles = String::new();
+
+    if let Some(state) = cell.state {
+        match state {
+            CellState::New => classes.push("cell-new"),
+            CellState::Merged => classes.push("cell-merged cell-moved"),
+            CellState::Moved => classes.push("cell-moved"),
+        }
+    }
+
+    if let Some((prev_i, prev_j)) = cell.prev {
+        let from_x = (prev_j - j as isize) * TILE_SIZE;
+        let from_y = (prev_i - i as isize) * TILE_SIZE;
+
+        extra_styles.push_str(&format!("--from-x: {}px; --from-y: {}px;", from_x, from_y))
+    };
+
+    html! {
+        <div class="cell">
+            <div class={classes}
+                style={extra_styles}>
                 {
-                    matrix.iter().enumerate().map(|(i,  row)| {
-                        html! {
-                            {
-                                row.iter().enumerate().map(|(j, cell)| {
-                                    let mut classes = classes!("inner-cell", get_class_for_score(cell.value));
-
-                                    if let Some(state) = cell.state {
-                                        match state  {
-                                            CellState::New => classes.push("cell-new"),
-                                            CellState::Merged => classes.push("cell-merged"),
-                                            CellState::Moved => classes.push("cell-moved"),
-                                        }
-                                    }
-
-                                    let transform_style = if let Some((prev_i, prev_j)) = cell.prev {
-                                        let from_x = (prev_j - j as isize) * TILE_SIZE;
-                                        let from_y = (prev_i - i as isize) * TILE_SIZE;
-                                        
-                                        format!("--from-x: {}px; --from-y: {}px;", from_x, from_y)                                     
-                                    } else {
-                                        "".to_string()
-                                    };
-                                        
-                                    html! {
-                                        <div class="cell">
-                                            <div class={classes}
-                                                style={transform_style}>
-                                                { 
-                                                    if cell.value == 0 { "".to_string() } 
-                                                    else { cell.value.to_string() } 
-                                                }
-                                            </div>
-                                        </div>
-                                    }
-                                }).collect::<Html>()
-                            }
-                        }
-                    }).collect::<Html>()
+                    if cell.value == 0 { "".to_string() }
+                    else { cell.value.to_string() }
                 }
             </div>
         </div>
-    }    
+    }
 }
 
 fn reset_tile_states(matrix: &mut Matrix) {
     for row in matrix.iter_mut() {
         for cell in row.iter_mut() {
             cell.state = None;
-            cell.dir = None;
             cell.prev = None;
         }
     }
 }
 
 fn generate_start_matrix() -> Matrix {
-    let mut start: Matrix = [[Cell { value: 0, state: None, dir: None, prev: None}; COLS]; ROWS];
+    let mut start: Matrix = [[Cell {
+        value: 0,
+        state: None,
+        prev: None,
+    }; COLS]; ROWS];
 
     spawn_tile(&mut start);
     spawn_tile(&mut start);
 
     start
 }
-
 
 fn is_within_bounds(i: usize, j: usize, row_offset: i8, col_offset: i8) -> bool {
     let next_i = (i as i8 + row_offset) as usize;
@@ -193,16 +191,18 @@ fn move_matrix(matrix: &mut Matrix, dir: Direction) {
                 let next_j = (current_j as i8 + col_offset) as usize;
 
                 if matrix[next_i][next_j].value == 0 {
-                    let mut moving_tile = matrix[current_i][current_j];
+                    let mut moving_tile: Cell = matrix[current_i][current_j];
                     moving_tile.state = Some(CellState::Moved);
-                    moving_tile.dir = Some(dir);
                     if moving_tile.prev.is_none() {
                         moving_tile.prev = Some((current_i as isize, current_j as isize));
                     }
-                    
-                    matrix[next_i][next_j] = moving_tile; 
-                    matrix[current_i][current_j] = Cell { value: 0, state: None, dir: None, prev: None };  
-                    
+
+                    matrix[next_i][next_j] = moving_tile;
+                    matrix[current_i][current_j] = Cell {
+                        value: 0,
+                        state: None,
+                        prev: None,
+                    };
 
                     current_i = next_i;
                     current_j = next_j;
@@ -225,9 +225,11 @@ fn move_matrix(matrix: &mut Matrix, dir: Direction) {
 
                     matrix[next_i][next_j].value *= 2;
                     matrix[next_i][next_j].state = Some(CellState::Merged);
+                    if matrix[next_i][next_j].prev.is_none() {
+                        matrix[next_i][next_j].prev = Some((current_i as isize, current_j as isize));
+                    }
 
                     has_changed = true;
-
                 }
             }
         }
@@ -250,7 +252,7 @@ fn spawn_tile(matrix: &mut Matrix) {
     }
 
     if let Some(&(x, y)) = empty_cells.choose(&mut thread_rng()) {
-        matrix[x][y].value = if rand::random::<f32>() < 0.9 { 2 } else { 4 }; 
+        matrix[x][y].value = if rand::random::<f32>() < 0.9 { 2 } else { 4 };
         matrix[x][y].state = Some(CellState::New);
     }
 }
